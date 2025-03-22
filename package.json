@@ -1,0 +1,38 @@
+{
+  "name": "ship-parts",
+  "version": "1.0.0",
+  "description": "Ship parts management for Star Atlas",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "star-atlas",
+    "solana",
+    "blockchain",
+    "gaming",
+    "ship-parts"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "@nfteyez/sol-rayz": "^0.10.2",
+    "@project-serum/anchor": "^0.26.0",
+    "@solana/web3.js": "^1.98.0",
+    "@staratlas/claim-stake": "^0.12.0",
+    "@staratlas/data-source": "^0.8.3",
+    "@staratlas/player-profile": "^0.11.0",
+    "@staratlas/sage": "^1.9.0-alpha.2",
+    "axios": "^1.8.4",
+    "dotenv": "^16.4.7",
+    "star-utils-lib": "file:../star-utils-lib"
+  }
+}
