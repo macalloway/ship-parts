@@ -8,10 +8,9 @@ import {
   getShipsInStarbaseFromProfile,
   ShipInfo,
   FleetInfo,
-  WalletAndProfiles,
   fetchNFTsForWallet,
-  NFTMetadata
-} from 'star-utils-lib';
+  NFTMetadata,
+} from 'star-utils-maca';
 import dotenv from 'dotenv';
 import path from 'path';
 
@@ -186,14 +185,32 @@ export async function getShipsInStarbases(profileAddress: string): Promise<ShipI
   try {
     console.log(`Récupération des vaisseaux dans les starbases pour le profil: ${profileAddress}`);
     
+    // ID du jeu SAGE (Star Atlas)
+    const gameId = "GAMEzqJehF8yAnKiTARUuhZMvLvkZVAsCVri5vSfemLr";
+    
     // Utiliser la fonction getShipsInStarbaseFromProfile de star-utils-lib
-    const ships = await getShipsInStarbaseFromProfile(profileAddress);
+    const ships = await getShipsInStarbaseFromProfile(profileAddress, gameId);
     
     console.log(`${ships.length} vaisseaux trouvés dans les starbases pour le profil ${profileAddress}`);
+    
+    // Log détaillé des vaisseaux trouvés dans les starbases
+    if (ships.length > 0) {
+      console.log("=== Détail des vaisseaux dans les starbases ===");
+      ships.forEach((ship, index) => {
+        console.log(`[${index + 1}/${ships.length}] ${ship.name} (${ship.mint}) - Symbol: ${(ship as any).symbol || 'N/A'}`);
+        
+        // Log des attributs pour aider à déterminer la classe
+        if (ship.attributes) {
+          console.log(`  Attributs: ${JSON.stringify(ship.attributes)}`);
+        }
+      });
+    }
     
     return ships;
   } catch (error) {
     console.error('Erreur lors de la récupération des vaisseaux dans les starbases:', error);
+    console.error('Détail de l\'erreur:', error instanceof Error ? error.message : String(error));
+    console.error('Stack trace:', error instanceof Error ? error.stack : 'Non disponible');
     return [];
   }
 }
@@ -268,6 +285,7 @@ export async function getAllShipsForWallet(walletAddress: string): Promise<{
 }> {
   // Récupérer les vaisseaux stakés
   const stakedShips = await getStakedShipsForWallet(walletAddress);
+
   
   // Récupérer les profils SAGE
   const sageProfiles = await getSageProfilesForWallet(walletAddress);
@@ -320,10 +338,10 @@ export async function getAllShipsForWallet(walletAddress: string): Promise<{
 export function compareShipsAndParts(ships: (ExtendedShipInfo | ExtendedStakedShipInfo)[], shipParts: NFTMetadata[]): {
   shipsWithoutParts: { ship: ExtendedShipInfo | ExtendedStakedShipInfo, count: number }[];
   partsWithoutShips: { part: NFTMetadata, count: number }[];
-  matchingPairs: { ship: ExtendedShipInfo | ExtendedStakedShipInfo, part: NFTMetadata, shipCount: number, partCount: number, difference: number }[];
+  matchingPairs: { ship: ExtendedShipInfo | ExtendedStakedShipInfo, part: NFTMetadata, shipCount: number, partCount: number, difference: number, shipClass: string }[];
 } {
   // Créer des maps pour regrouper les vaisseaux et les ship parts par symbole
-  const shipMap = new Map<string, { ships: (ExtendedShipInfo | ExtendedStakedShipInfo)[], totalCount: number }>();
+  const shipMap = new Map<string, { ships: (ExtendedShipInfo | ExtendedStakedShipInfo)[], totalCount: number, shipClass: string }>();
   const partMap = new Map<string, { parts: NFTMetadata[], totalCount: number }>();
   
   console.log("\n=== Symboles des vaisseaux ===");
@@ -339,9 +357,10 @@ export function compareShipsAndParts(ships: (ExtendedShipInfo | ExtendedStakedSh
     
     const shipSymbol = ship.symbol;
     const count = 'amount' in ship ? ship.amount : 1;
+    const shipClass = getShipClass(ship);
     
     if (!shipMap.has(shipSymbol)) {
-      shipMap.set(shipSymbol, { ships: [], totalCount: 0 });
+      shipMap.set(shipSymbol, { ships: [], totalCount: 0, shipClass });
     }
     
     const entry = shipMap.get(shipSymbol)!;
@@ -380,14 +399,14 @@ export function compareShipsAndParts(ships: (ExtendedShipInfo | ExtendedStakedSh
   // Résultats de la comparaison
   const shipsWithoutParts: { ship: ExtendedShipInfo | ExtendedStakedShipInfo, count: number }[] = [];
   const partsWithoutShips: { part: NFTMetadata, count: number }[] = [];
-  const matchingPairs: { ship: ExtendedShipInfo | ExtendedStakedShipInfo, part: NFTMetadata, shipCount: number, partCount: number, difference: number }[] = [];
+  const matchingPairs: { ship: ExtendedShipInfo | ExtendedStakedShipInfo, part: NFTMetadata, shipCount: number, partCount: number, difference: number, shipClass: string }[] = [];
   
   console.log("\n=== Comparaison des symboles ===");
   console.log("Symboles de vaisseaux:", Array.from(shipMap.keys()));
   console.log("Symboles de ship parts (sans SP):", Array.from(partMap.keys()));
   
   // Trouver les vaisseaux sans ship parts correspondants
-  for (const [symbol, { ships, totalCount }] of shipMap.entries()) {
+  for (const [symbol, { ships, totalCount, shipClass }] of shipMap.entries()) {
     if (!partMap.has(symbol)) {
       // Aucun ship part correspondant trouvé
       console.log(`Aucun ship part trouvé pour le symbole de vaisseau: ${symbol}`);
@@ -400,26 +419,53 @@ export function compareShipsAndParts(ships: (ExtendedShipInfo | ExtendedStakedSh
       console.log(`Correspondance trouvée pour le symbole: ${symbol}`);
       const { parts, totalCount: partCount } = partMap.get(symbol)!;
       
-      for (const ship of ships) {
-        const shipCount = 'amount' in ship ? ship.amount : 1;
-        
-        for (const part of parts) {
-          matchingPairs.push({
-            ship,
-            part,
-            shipCount,
-            partCount: part.quantity,
-            difference: part.quantity - shipCount
-          });
-        }
-      }
+      // Utiliser le premier vaisseau comme représentant pour ce symbole
+      const representativeShip = ships[0];
+      
+      // Utiliser le premier part comme représentant pour ce symbole
+      const representativePart = parts[0];
+      
+      // Ajouter une seule entrée avec les totaux
+      matchingPairs.push({
+        ship: representativeShip,
+        part: representativePart,
+        shipCount: totalCount,
+        partCount: partCount,
+        difference: partCount - totalCount,
+        shipClass
+      });
     }
   }
   
-  // Trouver les ship parts sans vaisseaux correspondants
+  // Trouver les ship parts sans vaisseaux correspondants et les ajouter à matchingPairs
   for (const [symbol, { parts, totalCount }] of partMap.entries()) {
     if (!shipMap.has(symbol)) {
       console.log(`Aucun vaisseau trouvé pour le symbole de ship part: ${symbol}`);
+      
+      // Créer un objet vaisseau factice pour les parts sans vaisseaux
+      const dummyShip = {
+        name: parts[0].name.replace(' Ship Part', ''),
+        symbol: symbol,
+        mint: 'dummy',
+        attributes: {},
+        image: '',
+        amount: 0
+      } as ExtendedShipInfo;
+      
+      // Utiliser le premier part comme représentant
+      const representativePart = parts[0];
+      
+      // Ajouter à matchingPairs avec shipCount = 0
+      matchingPairs.push({
+        ship: dummyShip,
+        part: representativePart,
+        shipCount: 0,
+        partCount: totalCount,
+        difference: totalCount, // Toutes les parts sont en excès
+        shipClass: 'Unknown' // Nous ne connaissons pas la classe pour les parts sans vaisseaux
+      });
+      
+      // Ajouter également à partsWithoutShips pour la compatibilité ascendante
       for (const part of parts) {
         partsWithoutShips.push({ part, count: part.quantity });
       }
@@ -440,7 +486,7 @@ export function compareShipsAndParts(ships: (ExtendedShipInfo | ExtendedStakedSh
 export function displayShipPartComparison(comparisonResult: {
   shipsWithoutParts: { ship: ExtendedShipInfo | ExtendedStakedShipInfo, count: number }[];
   partsWithoutShips: { part: NFTMetadata, count: number }[];
-  matchingPairs: { ship: ExtendedShipInfo | ExtendedStakedShipInfo, part: NFTMetadata, shipCount: number, partCount: number, difference: number }[];
+  matchingPairs: { ship: ExtendedShipInfo | ExtendedStakedShipInfo, part: NFTMetadata, shipCount: number, partCount: number, difference: number, shipClass: string }[];
 }) {
   const { shipsWithoutParts, partsWithoutShips, matchingPairs } = comparisonResult;
   
@@ -472,7 +518,7 @@ export function displayShipPartComparison(comparisonResult: {
     console.log('Aucune paire correspondante trouvée.');
   } else {
     // Regrouper par type de vaisseau pour éviter les doublons
-    const groupedPairs = new Map<string, { ship: ExtendedShipInfo | ExtendedStakedShipInfo, part: NFTMetadata, shipCount: number, partCount: number, difference: number }>();
+    const groupedPairs = new Map<string, { ship: ExtendedShipInfo | ExtendedStakedShipInfo, part: NFTMetadata, shipCount: number, partCount: number, difference: number, shipClass: string }>();
     
     for (const pair of matchingPairs) {
       const key = `${pair.ship.name}-${pair.part.name}`;
@@ -489,9 +535,63 @@ export function displayShipPartComparison(comparisonResult: {
           ? `${Math.abs(pair.difference)} ship parts manquants` 
           : 'Quantités égales';
       
-      console.log(`${pair.ship.name} (${pair.ship.symbol}) - Vaisseaux: ${pair.shipCount}, Ship parts: ${pair.partCount} - ${status}`);
+      console.log(`${pair.ship.name} (${pair.ship.symbol}) - Classe: ${pair.shipClass} - Vaisseaux: ${pair.shipCount}, Ship parts: ${pair.partCount} - ${status}`);
     }
   }
+}
+
+/**
+ * Get the order value for a ship class for sorting purposes
+ * @param shipClass The ship class to get the order value for
+ * @returns A number representing the order (lower numbers will appear first)
+ */
+function getShipClassOrder(shipClass: string): number {
+  const classOrder: Record<string, number> = {
+    'Titan': 1,
+    'Commander': 2,
+    'Capital': 3,
+    'Large': 4,
+    'Medium': 5,
+    'Small': 6,
+    'X-Small': 7,
+    'XX-Small': 8,
+    'XXS': 8, // Same as XX-Small
+  };
+
+  // Default to a high number for unknown classes
+  return classOrder[shipClass] || 9;
+}
+
+/**
+ * Get the ship class from attributes or name
+ * @param ship The ship to get the class for
+ * @returns The ship class as a string
+ */
+function getShipClass(ship: ExtendedShipInfo | ExtendedStakedShipInfo): string {
+  // Try to get the class from attributes
+  if (ship.attributes) {
+    const attrs = ship.attributes as any;
+    if (attrs.class) {
+      return attrs.class;
+    }
+    if (attrs.size) {
+      return attrs.size;
+    }
+  }
+
+  // Try to infer class from name
+  const name = ship.name.toLowerCase();
+  if (name.includes('titan')) return 'Titan';
+  if (name.includes('commander')) return 'Commander';
+  if (name.includes('capital')) return 'Capital';
+  if (name.includes('large')) return 'Large';
+  if (name.includes('medium')) return 'Medium';
+  if (name.includes('small') && name.includes('xx')) return 'XX-Small';
+  if (name.includes('small') && name.includes('x')) return 'X-Small';
+  if (name.includes('small')) return 'Small';
+  
+  // Default to Medium if we can't determine
+  return 'Medium';
 }
 
 /**
@@ -533,7 +633,7 @@ export function displayShipStatsByFaction(ships: StakedShipInfo[]): void {
     // Afficher la liste des vaisseaux avec leur nom et mint
     console.log('\nListe des vaisseaux:');
     factionShips.forEach((ship, index) => {
-      console.log(`${index + 1}. ${ship.name} (Mint: ${ship.mint}) - Quantité: ${ship.quantity}`);
+      console.log(`${index + 1}. ${ship.name} (Mint: ${ship.mint}) - Quantité: ${ship.amount}`);
     });
   });
 }
@@ -571,74 +671,42 @@ export function displaySageShipStats(ships: ShipInfo[], sourceLabel: string): vo
 }
 
 /**
- * Analyse et affiche des informations sur la flotte d'un portefeuille
- * @param walletAddress L'adresse du portefeuille à analyser
+ * Analyze and display information about a wallet's fleet
+ * @param walletAddress The wallet address to analyze
+ * @returns The comparison result object that can be used by the Vue.js application
  */
-export async function analyzeFleet(walletAddress: string): Promise<void> {
-  console.log(`Analyse de la flotte pour le portefeuille: ${walletAddress}`);
-  
-  // Récupérer tous les vaisseaux pour le portefeuille
-  const allShips = await getAllShipsForWallet(walletAddress);
-  
-  // Récupérer les ship parts dans le portefeuille
-  console.log(`Récupération des ship parts dans le portefeuille: ${walletAddress}`);
-  const shipParts = await getShipPartsInWallet(walletAddress);
-  
-  // Afficher les ship parts trouvés
-  console.log(`${shipParts.length} ship parts trouvés dans le portefeuille ${walletAddress}`);
-  
-  // Afficher les données brutes des ship parts pour le débogage
-  console.log("\n=== Données brutes des ship parts ===");
-  for (const part of shipParts.slice(0, 3)) { // Limiter à 3 pour éviter trop de logs
-    console.log(JSON.stringify(part, null, 2));
-  }
-  
-  // Combiner tous les vaisseaux dans un tableau unique
-  const rawShipsArray = [...allShips.stakedShips, ...allShips.sageFleetShips, ...allShips.starbaseShips, ...allShips.walletShips];
-  
-  // Convertir tous les vaisseaux en ExtendedShipInfo ou ExtendedStakedShipInfo
-  const extendedShips = toExtendedShips(rawShipsArray);
-  
-  // Regrouper les vaisseaux par symbole et additionner leurs quantités
-  const shipsBySymbol = new Map<string, ExtendedShipInfo | ExtendedStakedShipInfo>();
-  
-  for (const ship of extendedShips) {
-    if (!ship.symbol) {
-      console.log(`Vaisseau sans symbole: ${ship.name} (${ship.mint})`);
-      continue;
-    }
+export async function analyzeFleet(walletAddress: string): Promise<any> {
+  try {
+    console.log(`Analyzing fleet for wallet: ${walletAddress}`);
     
-    const amount = 'amount' in ship ? ship.amount : 1;
+    // Get all ships for the wallet (staked, SAGE fleets, starbases, and wallet)
+    const allShipsResult = await getAllShipsForWallet(walletAddress);
     
-    if (!shipsBySymbol.has(ship.symbol)) {
-      // Créer une copie du vaisseau avec la quantité initiale
-      const shipCopy = { ...ship, amount: amount };
-      shipsBySymbol.set(ship.symbol, shipCopy);
-    } else {
-      // Mettre à jour la quantité du vaisseau existant
-      const existingShip = shipsBySymbol.get(ship.symbol)!;
-      if ('amount' in existingShip) {
-        existingShip.amount += amount;
-      } else {
-        (existingShip as any).amount = amount;
-      }
-    }
+    // Get all ship parts in the wallet
+    const shipParts = await getShipPartsInWallet(walletAddress);
+    
+    console.log(`Found ${allShipsResult.total} ships and ${shipParts.length} ship parts for wallet ${walletAddress}`);
+    
+    // Convert all ships to extended ships with symbol property
+    const allShips = toExtendedShips([
+      ...allShipsResult.stakedShips,
+      ...allShipsResult.sageFleetShips,
+      ...allShipsResult.starbaseShips,
+      ...allShipsResult.walletShips
+    ]);
+    
+    // Compare ships and parts
+    const comparisonResult = compareShipsAndParts(allShips, shipParts);
+    
+    // Display the comparison result
+    displayShipPartComparison(comparisonResult);
+    
+    // Return the comparison result for the API
+    return comparisonResult;
+  } catch (error) {
+    console.error('Error analyzing fleet:', error);
+    throw error;
   }
-  
-  // Convertir la Map en tableau
-  const consolidatedShips = Array.from(shipsBySymbol.values());
-  
-  // Afficher les données brutes des vaisseaux pour le débogage
-  console.log("\n=== Données brutes des vaisseaux consolidés ===");
-  for (const ship of consolidatedShips.slice(0, 3)) { // Limiter à 3 pour éviter trop de logs
-    console.log(JSON.stringify(ship, null, 2));
-  }
-  
-  // Afficher le rapport de comparaison entre les vaisseaux et les ship parts
-  const comparisonResult = compareShipsAndParts(consolidatedShips, shipParts);
-  displayShipPartComparison(comparisonResult);
-  
-  console.log('\nTest terminé avec succès');
 }
 
 /**

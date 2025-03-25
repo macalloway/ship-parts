@@ -3,7 +3,7 @@ import {
   fetchGalaxyData, 
   GalaxyNFT, 
   NFTMetadata 
-} from 'star-utils-lib';
+} from 'star-utils-maca';
 
 // Ship parts specific interfaces
 export interface ShipPart {
