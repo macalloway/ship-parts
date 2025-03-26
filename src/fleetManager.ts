@@ -283,6 +283,9 @@ export async function getAllShipsForWallet(walletAddress: string): Promise<{
   walletShips: ShipInfo[];
   total: number;
 }> {
+
+  console.log('\n========== FLEET MANAGER: GET ALL SHIPS ==========');
+  console.log(`Getting all ships for wallet: ${walletAddress}`);
   // Récupérer les vaisseaux stakés
   const stakedShips = await getStakedShipsForWallet(walletAddress);
 

@@ -63,5 +63,9 @@ app.get('*', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
+  console.log('=================================================');
   console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'production'}`);
+  console.log(`Time: ${new Date().toISOString()}`);
+  console.log('=================================================');
 });

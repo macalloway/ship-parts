@@ -163,7 +163,8 @@ export default {
         shipCount: item.count,
         partCount: 0,
         difference: -item.count,
-        shipClass: this.getShipClass(item.ship)
+        shipClass: this.getShipClass(item.ship),
+        uniqueId: item.ship.mint || Math.random().toString(36).substring(2, 15)
       }));
       
       // Traiter les ship parts sans vaisseaux
@@ -180,7 +181,8 @@ export default {
             shipCount: 0,
             partCount: item.count,
             difference: item.count,
-            shipClass: 'Unknown'
+            shipClass: 'Unknown',
+            uniqueId: item.part.mint || Math.random().toString(36).substring(2, 15)
           };
         });
       
@@ -198,7 +200,8 @@ export default {
           shipCount: pair.shipCount,
           partCount: pair.partCount,
           difference: pair.difference,
-          shipClass: pair.shipClass || 'Unknown'
+          shipClass: pair.shipClass || 'Unknown',
+          uniqueId: pair.ship.mint || Math.random().toString(36).substring(2, 15)
         };
       });
       
@@ -209,20 +212,25 @@ export default {
         ...partsWithoutShips
       ];
       
-      // Déduplication finale basée sur le nom normalisé et le symbole
-      const uniqueEntries = {};
+      // Regrouper les vaisseaux par nom et symbole, en additionnant les compteurs
+      const groupedEntries = {};
       
       combinedData.forEach(item => {
         const key = item.shipName.toLowerCase() + '|' + item.symbol.toLowerCase();
         
-        // Si l'entrée n'existe pas encore ou si l'entrée actuelle a une quantité non nulle de vaisseaux
-        // (préférer les entrées avec des vaisseaux réels plutôt que des entrées de ship parts uniquement)
-        if (!uniqueEntries[key] || item.shipCount > 0) {
-          uniqueEntries[key] = item;
+        if (!groupedEntries[key]) {
+          // Première occurrence de ce type de vaisseau
+          groupedEntries[key] = { ...item };
+        } else {
+          // Ce type de vaisseau existe déjà, additionner les compteurs
+          const existingEntry = groupedEntries[key];
+          existingEntry.shipCount += item.shipCount;
+          existingEntry.partCount += item.partCount;
+          existingEntry.difference = existingEntry.partCount - existingEntry.shipCount;
         }
       });
       
-      return Object.values(uniqueEntries);
+      return Object.values(groupedEntries);
     },
     
     normalizeShipPartName(name) {
