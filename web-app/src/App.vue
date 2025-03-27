@@ -1,6 +1,6 @@
 <template>
   <div class="container mt-4">
-    <h1 class="text-center mb-4">Ship Parts Manager</h1>
+    <h1 class="text-center mb-4">Ships / Ship Parts Comparison</h1>
     
     <div class="card mb-4">
       <div class="card-body">
@@ -30,13 +30,20 @@
     </div>
 
     <div v-if="noDataFound" class="alert alert-info">
-      Aucune donnée trouvée pour ce portefeuille. Cela peut être dû à l'absence de profil SAGE, de vaisseaux ou de ship parts.
+      No data for this wallet
     </div>
 
     <div v-if="fleetData.length > 0">
       <div class="card">
-        <div class="card-header">
+        <div class="card-header d-flex justify-content-between align-items-center">
           <h5 class="mb-0">Analysis Results</h5>
+          <button 
+            class="btn btn-sm btn-outline-secondary export-csv-btn" 
+            title="Export to CSV"
+            @click="exportToCSV"
+          >
+            <i class="csv-icon">📊</i> CSV
+          </button>
         </div>
         <div class="card-body">
           <div class="table-responsive">
@@ -288,7 +295,50 @@ export default {
       if (difference === 0) return 'Equal quantities';
       if (difference > 0) return `${difference} excess ship parts`;
       return `${Math.abs(difference)} missing ship parts`;
-    }
+    },
+    
+    exportToCSV() {
+      if (!this.fleetData.length) return;
+      
+      // Define CSV headers
+      const headers = ['Ship Name', 'Total Ships', 'Ship Parts', 'Difference'];
+      
+      // Convert data to CSV format
+      const csvData = this.sortedFleetData.map(item => [
+        item.shipName,
+        item.shipCount,
+        item.partCount,
+        item.difference
+      ]);
+      
+      // Add headers to the beginning
+      csvData.unshift(headers);
+      
+      // Convert to CSV string
+      const csvString = csvData.map(row => row.map(cell => {
+        // Escape quotes and wrap fields with commas or quotes in double quotes
+        const cellStr = String(cell);
+        return cellStr.includes(',') || cellStr.includes('"') 
+          ? `"${cellStr.replace(/"/g, '""')}"` 
+          : cellStr;
+      }).join(',')).join('\n');
+      
+      // Create a blob and download link
+      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      
+      // Set download attributes
+      const date = new Date().toISOString().slice(0, 10);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `ship-parts-analysis-${date}.csv`);
+      link.style.visibility = 'hidden';
+      
+      // Append to document, trigger download, and clean up
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    },
   }
 };
 </script>
@@ -327,5 +377,15 @@ export default {
 .ship-symbol {
   font-size: 0.9em;
   color: #666;
+}
+.export-csv-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.85rem;
+}
+
+.csv-icon {
+  font-size: 1.1rem;
 }
 </style>
